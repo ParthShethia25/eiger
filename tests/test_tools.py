@@ -11,13 +11,18 @@ def _bank():
     return b
 
 
-def test_vulnerable_refund_to_unowned_is_unauthorized():
+def test_refund_to_unowned_is_blocked_even_when_vulnerable():
+    # Contract change (halcyon/authz.py): this used to assert that vulnerable
+    # mode lets the refund through and records UNAUTHORIZED_TOOL_CALL after the
+    # fact. Authorisation is now a chokepoint that does not read settings, so
+    # the money never moves and the attempt is recorded as a denial instead.
     b, s = _bank(), InMemoryStore()
     settings = load_settings({"HALCYON_MODE": "vulnerable"})
     out = tools.execute("issue_refund", "me", {"to_account": "acct-attacker", "amount": 500}, b, s, settings)
-    assert "500" in out
-    assert audit.has_event(s, "me", "m5", audit.UNAUTHORIZED_TOOL_CALL)
-    assert b.get("acct-attacker").balance == 500
+    assert "denied" in out.lower()
+    assert audit.has_event(s, "me", "m5", audit.TOOL_CALL_DENIED)
+    assert not audit.has_event(s, "me", "m5", audit.UNAUTHORIZED_TOOL_CALL)
+    assert b.get("acct-attacker").balance == 0
 
 
 def test_secure_refund_to_unowned_is_denied():
@@ -29,13 +34,15 @@ def test_secure_refund_to_unowned_is_denied():
     assert b.get("acct-attacker").balance == 0
 
 
-def test_update_email_on_unowned_records_modification_when_vulnerable():
+def test_update_email_on_unowned_is_blocked_even_when_vulnerable():
+    # Same contract change: the takeover is refused before set_email runs.
     b, s = _bank(), InMemoryStore()
     b.seed([{"id": "acct-victim", "owner_session": "victim", "balance": 10, "email": "v@x"}])
     settings = load_settings({"HALCYON_MODE": "vulnerable"})
     tools.execute("update_email", "me", {"account": "acct-victim", "email": "attacker@x"}, b, s, settings)
-    assert audit.has_event(s, "me", "m5", audit.UNAUTHORIZED_ACCOUNT_MODIFICATION)
-    assert b.get("acct-victim").email == "attacker@x"
+    assert audit.has_event(s, "me", "m5", audit.TOOL_CALL_DENIED)
+    assert not audit.has_event(s, "me", "m5", audit.UNAUTHORIZED_ACCOUNT_MODIFICATION)
+    assert b.get("acct-victim").email == "v@x"
 
 
 def test_owned_transfer_is_not_flagged_unauthorized():

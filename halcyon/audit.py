@@ -13,6 +13,10 @@ MALICIOUS_ARTIFACT_IDENTIFIED = "malicious_artifact_identified"
 VULNERABLE_DEPENDENCY_IDENTIFIED = "vulnerable_dependency_identified"
 TOOL_CALL = "tool_call"
 UNAUTHORIZED_TOOL_CALL = "unauthorized_tool_call"
+# Recorded when the authorisation chokepoint (halcyon/authz.py) refuses a
+# bank-tool call. Distinct from UNAUTHORIZED_TOOL_CALL, which records that
+# an unauthorised operation actually took effect.
+TOOL_CALL_DENIED = "tool_call_denied"
 UNAUTHORIZED_ACCOUNT_MODIFICATION = "unauthorized_account_modification"
 MCP_POISONED_INVOCATION = "mcp_poisoned_invocation"
 MCP_DESC_MUTATION_ACCEPTED = "mcp_desc_mutation_accepted"
