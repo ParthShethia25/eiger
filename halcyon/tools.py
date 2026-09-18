@@ -1,4 +1,4 @@
-from halcyon import audit, guards
+from halcyon import audit, authz, guards
 from halcyon.bank import Bank
 from halcyon.config import Settings
 from halcyon.store import Store
@@ -29,6 +29,23 @@ def execute(name: str, session_id: str, args: dict, bank: Bank,
             store: Store, settings: Settings) -> str:
     audit.record(store, session_id, "m5", audit.TOOL_CALL, session_id,
                  {"tool": name, "args": args})
+    # Authorisation chokepoint. This runs before any branch below, so no tool
+    # body can mutate an account the session does not own. It is not gated on
+    # settings: guards.authorize_tool_call still exists and still honours
+    # SEC_TOOL_SCOPE_ENFORCEMENT for the lab's L1/L2 lesson, but it is no longer
+    # the only thing standing between an injected instruction and the ledger.
+    decision = authz.decide(session_id, name, args, bank)
+    if not decision.allow:
+        # Recorded under its own event type, deliberately NOT under
+        # UNAUTHORIZED_TOOL_CALL. In this lab that event is the mechanism's
+        # record that unauthorised money actually moved, which is why the M5
+        # validator treats its presence as a successful attack. A blocked
+        # attempt is a different fact and gets a different event, so detection
+        # still sees the attempt without the audit log claiming a theft that
+        # never happened.
+        audit.record(store, session_id, "m5", audit.TOOL_CALL_DENIED, session_id,
+                     {"tool": name, "args": args, "reason": decision.reason})
+        return f"denied: {decision.reason}"
     if not guards.authorize_tool_call(session_id, name, args, bank, settings):
         return f"denied: {name} requires authorization / human approval"
     if name == "get_balance":

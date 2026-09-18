@@ -48,7 +48,8 @@ if not _in_process and _core_url and _crm_url:
     crm_url = _crm_url
 
     def _mcp_host_factory(session_id: str, settings=_settings):
-        return http_host(core_url, crm_url, _vault, _store, settings, session_id)
+        return http_host(core_url, crm_url, _vault, _store, settings, session_id,
+                         _bank_for(session_id))
 else:
     # In-memory fallback: run the same servers against this process's own fixtures.
     logging.getLogger(__name__).warning(

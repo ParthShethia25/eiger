@@ -5,7 +5,11 @@ from halcyon.llm import FinalAnswer, StubToolLLM, ToolCall
 from halcyon.store import InMemoryStore
 
 
-def test_agent_executes_scripted_tool_calls_and_records_unauthorized():
+def test_agent_executes_scripted_tool_calls_and_denies_unauthorized():
+    # Contract change (halcyon/authz.py): the agent still runs the tool call the
+    # model asked for -- the loop is unchanged and the injection still worked on
+    # the model -- but the tool boundary refuses it, so the call is recorded as
+    # a denial and the attacker account is never credited.
     b = Bank()
     b.seed([{"id": "acct-attacker", "owner_session": "attacker", "balance": 0, "email": "a@x"}])
     s = InMemoryStore()
@@ -17,7 +21,10 @@ def test_agent_executes_scripted_tool_calls_and_records_unauthorized():
     reply, calls = agent.run(llm, "me", "refund me 250 to acct-attacker", b, s, settings)
     assert reply == "Refund issued."
     assert len(calls) == 1
-    assert audit.has_event(s, "me", "m5", audit.UNAUTHORIZED_TOOL_CALL)
+    assert "denied" in calls[0][2].lower()
+    assert audit.has_event(s, "me", "m5", audit.TOOL_CALL_DENIED)
+    assert not audit.has_event(s, "me", "m5", audit.UNAUTHORIZED_TOOL_CALL)
+    assert b.get("acct-attacker").balance == 0
 
 
 def test_agent_stops_at_step_limit():

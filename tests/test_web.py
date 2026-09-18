@@ -328,14 +328,19 @@ def test_rag_poison_then_ask_core_pass():
     assert client.get("/validate/m3", params={"session": "victim"}).json()["core"] == "pass"
 
 
-def test_agent_unauthorized_refund_marks_core():
+def test_agent_unauthorized_refund_is_denied_end_to_end():
+    # Contract change (halcyon/authz.py): /validate/m5 core now reads "fail"
+    # here, and that is the secure outcome. The validator's core event means
+    # unauthorised money actually moved; with the chokepoint in place it never
+    # does, so the event is absent and the attack does not validate.
     from halcyon.llm import FinalAnswer, ToolCall
     client, store, bank = make_client_agent(
         {"HALCYON_MODE": "vulnerable"},
         [ToolCall("issue_refund", {"to_account": "acct-attacker", "amount": 300}), FinalAnswer("done")])
     client.post("/reset/m5", json={"session_id": "p1"})
     client.post("/api/agent", json={"session_id": "p1", "message": "refund 300 to acct-attacker"})
-    assert client.get("/validate/m5", params={"session": "p1"}).json()["core"] == "pass"
+    assert client.get("/validate/m5", params={"session": "p1"}).json()["core"] == "fail"
+    assert bank.get("acct-attacker").balance == 0
 
 
 def test_app_is_rebranded_to_eiger_iggy():
